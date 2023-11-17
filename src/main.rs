@@ -3,12 +3,10 @@ use colored::Colorize;
 
 fn main() {
     let args = Args::parse();
-
     args.setup_directory();
     args.setup_src();
     let repo = args.create_github_repo();
     args.commit_and_push(repo);
-
     println!("Done.");
 }
 
@@ -30,6 +28,8 @@ struct Args {
     rust: bool,
     #[clap(short, long, required = true)]
     name: String,
+    #[clap(short, long, default_value_t = false)]
+    public: bool,
 }
 
 impl Args {
@@ -39,7 +39,7 @@ impl Args {
 
         std::env::set_current_dir(&self.name).unwrap();
         if std::fs::File::create("README.md").is_err() {
-            println!("{}: Unable to created README.md.", "Warning".yellow());
+            println!("{}: Unable to create README.md.", "Warning".yellow());
         }
 
         std::process::Command::new("git")
@@ -75,10 +75,14 @@ impl Args {
 
     fn create_github_repo(&self) -> String {
         println!("Creating GitHub Repo...");
+        let visibility = match self.public {
+            true => "--public",
+            false => "--private",
+        };
         let res = std::process::Command::new("gh")
             .args(["repo"])
             .args(["create"])
-            .args(["--private"])
+            .args([visibility])
             .args([&self.name])
             .output()
             .unwrap()
