@@ -10,7 +10,7 @@ fn main() {
     println!("Done.");
 }
 
-fn get_ignore_string<'a>(args: &Args) -> &'a str {
+fn get_ignore_str<'a>(args: &Args) -> &'a str {
     match (args.rust, args.csharp) {
         (_, true) => "bin\nobj",
         (_, _) => "target", // default is rust case
@@ -47,7 +47,7 @@ impl Args {
             .output()
             .unwrap();
 
-        std::fs::write(".gitignore", get_ignore_string(self)).unwrap();
+        std::fs::write(".gitignore", get_ignore_str(self)).unwrap();
 
         println!("Creating docs directory...");
         std::fs::create_dir("docs").unwrap();
