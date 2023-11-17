@@ -1,0 +1,117 @@
+use clap::Parser;
+use colored::Colorize;
+
+fn main() {
+    let args = Args::parse();
+
+    args.setup_directory();
+    args.setup_src();
+    let repo = args.create_github_repo();
+    args.commit_and_push(repo);
+
+    println!("Done.");
+}
+
+fn get_ignore_string<'a>(args: &Args) -> &'a str {
+    match (args.rust, args.csharp) {
+        (_, true) => "bin\nobj",
+        (_, _) => "target", // default is rust case
+    }
+}
+
+#[derive(Parser, Debug)]
+#[command(name = "Project Builder")]
+#[command(author = "Samuel J.")]
+#[command(about = "Creates starter project structure.")]
+struct Args {
+    #[clap(short, long, group = "language")]
+    csharp: bool,
+    #[clap(short, long, group = "language")]
+    rust: bool,
+    #[clap(short, long, required = true)]
+    name: String,
+}
+
+impl Args {
+    fn setup_directory(&self) {
+        println!("Creating project directory...");
+        std::fs::create_dir(&self.name).unwrap();
+
+        std::env::set_current_dir(&self.name).unwrap();
+        if std::fs::File::create("README.md").is_err() {
+            println!("{}: Unable to created README.md.", "Warning".yellow());
+        }
+
+        std::process::Command::new("git")
+            .args(["init"])
+            .output()
+            .unwrap();
+
+        std::fs::write(".gitignore", get_ignore_string(self)).unwrap();
+
+        println!("Creating docs directory...");
+        std::fs::create_dir("docs").unwrap();
+    }
+
+    fn setup_src(&self) {
+        std::fs::create_dir("src").unwrap();
+        std::env::set_current_dir("src").unwrap();
+        if self.csharp {
+            println!("Creating C# project...");
+            std::process::Command::new("dotnet")
+                .args(["new", "console"])
+                .args(["-o", &self.name])
+                .output()
+                .unwrap();
+        } else {
+            println!("Creating Rust project...");
+            std::process::Command::new("cargo")
+                .args(["new", &self.name])
+                .output()
+                .unwrap();
+        }
+        std::env::set_current_dir("..").unwrap();
+    }
+
+    fn create_github_repo(&self) -> String {
+        println!("Creating GitHub Repo...");
+        let res = std::process::Command::new("gh")
+            .args(["repo"])
+            .args(["create"])
+            .args(["--private"])
+            .args([&self.name])
+            .output()
+            .unwrap()
+            .stdout;
+
+        String::from_utf8(res).unwrap().trim_end().to_string()
+    }
+
+    fn commit_and_push(&self, github: String) {
+        println!("Pushing to repository...");
+        std::process::Command::new("git")
+            .args(["remote"])
+            .args(["add", "origin", &format!("{}.git", github)])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["add", "*"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["branch"])
+            .args(["-m", "main"])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["commit"])
+            .args(["-m", "\"Project initialisation\""])
+            .output()
+            .unwrap();
+        std::process::Command::new("git")
+            .args(["push"])
+            .args(["-u", "origin", "main"])
+            .output()
+            .unwrap();
+    }
+}
