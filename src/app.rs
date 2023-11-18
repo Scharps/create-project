@@ -1,12 +1,13 @@
 use clap::Parser;
 use colored::Colorize;
+use std::process::Output;
 
 macro_rules! exec_command {
     ($comm: expr, $($arg:expr),+ ) => {
-        std::process::Command::new($comm)
+        print_if_err(std::process::Command::new($comm)
             .args([$($arg),*])
             .output()
-            .unwrap()
+            .unwrap())
     };
 }
 
@@ -126,7 +127,8 @@ impl App {
             Visibility::Public => "--public",
             Visibility::Private => "--private",
         };
-        let res = gh!("repo", "create", visibility, &self.name).stdout;
+        let res = gh!("repo", "create", visibility, &self.name);
+        let res = res.stdout;
         String::from_utf8(res).unwrap().trim_end().to_string()
     }
 
@@ -136,7 +138,7 @@ impl App {
         git!("add", ".");
         git!("branch", "-m", "main");
         git!("commit", "-m", "Project initialisation");
-        git!("push");
+        git!("push", "-u", "origin", "main");
     }
 }
 
@@ -181,4 +183,15 @@ impl From<Args> for App {
             },
         }
     }
+}
+
+enum Error<'a> {
+    CommandUnsuccessful(&'a str),
+}
+
+fn print_if_err(output: Output) -> Output {
+    if !output.status.success() {
+        println!("{output:?}");
+    }
+    output
 }
