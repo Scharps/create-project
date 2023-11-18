@@ -1,39 +1,7 @@
+use crate::prelude::*;
+use crate::software::{CSharpProjectBuilder, RustProjectBuilder, SoftwareProjectBuilder};
 use clap::Parser;
 use colored::Colorize;
-use std::process::Output;
-
-macro_rules! exec_command {
-    ($comm: expr, $($arg:expr),+ ) => {
-        print_if_err(std::process::Command::new($comm)
-            .args([$($arg),*])
-            .output()
-            .unwrap())
-    };
-}
-
-macro_rules! git {
-    ($($arg:expr),+) => {
-        exec_command!("git", $($arg),+)
-    };
-}
-
-macro_rules! gh {
-    ($($arg:expr),+) => {
-        exec_command!("gh", $($arg),+)
-    };
-}
-
-macro_rules! cargo {
-    ($($arg:expr),+) => {
-        exec_command!("cargo", $($arg),+)
-    };
-}
-
-macro_rules! dotnet {
-    ($($arg:expr),+) => {
-        exec_command!("dotnet", $($arg),+)
-    };
-}
 
 pub struct App {
     name: String,
@@ -44,49 +12,6 @@ pub struct App {
 enum Visibility {
     Public,
     Private,
-}
-
-trait SoftwareProjectBuilder {
-    fn create(&self);
-    fn ignore_str(&self) -> &'static str;
-}
-
-struct RustProjectBuilder {
-    name: String,
-    lib: bool,
-}
-
-impl SoftwareProjectBuilder for RustProjectBuilder {
-    fn create(&self) {
-        let project_type = match self.lib {
-            true => "--lib",
-            false => "--bin",
-        };
-        cargo!("new", project_type, self.name.as_str());
-    }
-
-    fn ignore_str(&self) -> &'static str {
-        "target"
-    }
-}
-
-struct CSharpProjectBuilder {
-    name: String,
-    lib: bool,
-}
-
-impl SoftwareProjectBuilder for CSharpProjectBuilder {
-    fn create(&self) {
-        let project_type = match self.lib {
-            true => "classlib",
-            false => "console",
-        };
-        dotnet!("new", project_type, "-o", self.name.as_str());
-    }
-
-    fn ignore_str(&self) -> &'static str {
-        "bin\nobj"
-    }
 }
 
 impl App {
@@ -182,15 +107,4 @@ impl From<Args> for App {
             },
         }
     }
-}
-
-enum Error<'a> {
-    CommandUnsuccessful(&'a str),
-}
-
-fn print_if_err(output: Output) -> Output {
-    if !output.status.success() {
-        println!("{output:?}");
-    }
-    output
 }

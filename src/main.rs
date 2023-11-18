@@ -1,4 +1,6 @@
 mod app;
+mod prelude;
+mod software;
 
 use crate::app::Args;
 use app::App;
