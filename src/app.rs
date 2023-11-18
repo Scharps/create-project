@@ -49,15 +49,23 @@ impl App {
         std::env::set_current_dir("src").unwrap();
         if self.args.csharp {
             println!("Creating C# project...");
+            let type_str = match self.args.lib {
+                true => "classlib",
+                false => "console",
+            };
             std::process::Command::new("dotnet")
-                .args(["new", "console"])
+                .args(["new", type_str])
                 .args(["-o", &self.args.name])
                 .output()
                 .unwrap();
         } else {
             println!("Creating Rust project...");
+            let type_str = match self.args.lib {
+                true => "--lib",
+                false => "--bin",
+            };
             std::process::Command::new("cargo")
-                .args(["new", &self.args.name])
+                .args(["new", type_str, &self.args.name])
                 .output()
                 .unwrap();
         }
@@ -126,4 +134,6 @@ struct Args {
     name: String,
     #[clap(short, long, default_value_t = false)]
     public: bool,
+    #[clap(short, long, default_value_t = false)]
+    lib: bool,
 }
