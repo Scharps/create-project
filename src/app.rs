@@ -1,34 +1,80 @@
 use clap::Parser;
 use colored::Colorize;
 
-pub struct App {
-    args: Args,
+pub struct App<'a> {
+    name: &'a str,
+    repo_visibility: Visibility,
+    software_builder: Box<dyn SoftwareProjectBuilder>,
 }
 
-impl App {
-    pub fn new() -> Self {
-        Self {
-            args: Args::parse(),
-        }
+enum Visibility {
+    Public,
+    Private,
+}
+
+trait SoftwareProjectBuilder {
+    fn create(&self);
+    fn ignore_str(&self) -> &'static str;
+}
+
+struct RustProjectBuilder<'a> {
+    name: &'a str,
+    lib: bool,
+}
+
+impl<'a> SoftwareProjectBuilder for RustProjectBuilder<'a> {
+    fn create(&self) {
+        let project_type = match self.lib {
+            true => "--lib",
+            false => "--bin",
+        };
+        std::process::Command::new("cargo")
+            .args(["new", project_type, self.name])
+            .output()
+            .unwrap();
     }
 
+    fn ignore_str(&self) -> &'static str {
+        "target"
+    }
+}
+
+struct CSharpProjectBuilder<'a> {
+    name: &'a str,
+    lib: bool,
+}
+
+impl<'a> SoftwareProjectBuilder for CSharpProjectBuilder<'a> {
+    fn create(&self) {
+        let project_type = match self.lib {
+            true => "classlib",
+            false => "console",
+        };
+        std::process::Command::new("dotnet")
+            .args(["new", project_type])
+            .args(["-o", self.name])
+            .output()
+            .unwrap();
+    }
+
+    fn ignore_str(&self) -> &'static str {
+        "bin\nobj"
+    }
+}
+
+impl<'a> App<'a> {
     pub fn run(&self) {
         self.setup_directory();
         self.setup_src();
         let repo = self.create_github_repo();
         self.commit_and_push(repo);
     }
-    fn get_ignore_str<'a>(&self) -> &'a str {
-        match (self.args.rust, self.args.csharp) {
-            (_, true) => "bin\nobj",
-            (_, _) => "target", // default is rust case
-        }
-    }
+
     fn setup_directory(&self) {
         println!("Creating project directory...");
-        std::fs::create_dir(&self.args.name).unwrap();
+        std::fs::create_dir(&self.name).unwrap();
 
-        std::env::set_current_dir(&self.args.name).unwrap();
+        std::env::set_current_dir(&self.name).unwrap();
         if std::fs::File::create("README.md").is_err() {
             println!("{}: Unable to create README.md.", "Warning".yellow());
         }
@@ -38,7 +84,7 @@ impl App {
             .output()
             .unwrap();
 
-        std::fs::write(".gitignore", self.get_ignore_str()).unwrap();
+        std::fs::write(".gitignore", self.software_builder.ignore_str()).unwrap();
 
         println!("Creating docs directory...");
         std::fs::create_dir("docs").unwrap();
@@ -47,42 +93,21 @@ impl App {
     fn setup_src(&self) {
         std::fs::create_dir("src").unwrap();
         std::env::set_current_dir("src").unwrap();
-        if self.args.csharp {
-            println!("Creating C# project...");
-            let type_str = match self.args.lib {
-                true => "classlib",
-                false => "console",
-            };
-            std::process::Command::new("dotnet")
-                .args(["new", type_str])
-                .args(["-o", &self.args.name])
-                .output()
-                .unwrap();
-        } else {
-            println!("Creating Rust project...");
-            let type_str = match self.args.lib {
-                true => "--lib",
-                false => "--bin",
-            };
-            std::process::Command::new("cargo")
-                .args(["new", type_str, &self.args.name])
-                .output()
-                .unwrap();
-        }
+        self.software_builder.create();
         std::env::set_current_dir("..").unwrap();
     }
 
     fn create_github_repo(&self) -> String {
         println!("Creating GitHub Repo...");
-        let visibility = match self.args.public {
-            true => "--public",
-            false => "--private",
+        let visibility = match self.repo_visibility {
+            Visibility::Public => "--public",
+            Visibility::Private => "--private",
         };
         let res = std::process::Command::new("gh")
             .args(["repo"])
             .args(["create"])
             .args([visibility])
-            .args([&self.args.name])
+            .args([&self.name])
             .output()
             .unwrap()
             .stdout;
@@ -136,4 +161,28 @@ struct Args {
     public: bool,
     #[clap(short, long, default_value_t = false)]
     lib: bool,
+}
+
+impl<'a> From<Args> for App<'a> {
+    fn from(args: Args) -> Self {
+        let software_project_builder: Box<dyn SoftwareProjectBuilder> =
+            match (args.rust, args.csharp) {
+                (_, true) => Box::new(CSharpProjectBuilder {
+                    name: args.name.as_str(),
+                    lib: args.lib,
+                }),
+                (_, _) => Box::new(RustProjectBuilder {
+                    name: args.name.as_str(),
+                    lib: args.lib,
+                }),
+            };
+        Self {
+            name: args.name.as_str(),
+            software_builder: software_project_builder,
+            repo_visibility: match args.public {
+                true => Visibility::Public,
+                false => Visibility::Private,
+            },
+        }
+    }
 }
