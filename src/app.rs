@@ -1,8 +1,41 @@
 use clap::Parser;
 use colored::Colorize;
 
-pub struct App<'a> {
-    name: &'a str,
+macro_rules! exec_command {
+    ($comm: expr, $($arg:expr),+ ) => {
+        std::process::Command::new($comm)
+            .args([$($arg),*])
+            .output()
+            .unwrap()
+    };
+}
+
+macro_rules! git {
+    ($($arg:expr),+) => {
+        exec_command!("git", $($arg),+)
+    };
+}
+
+macro_rules! gh {
+    ($($arg:expr),+) => {
+        exec_command!("gh", $($arg),+)
+    };
+}
+
+macro_rules! cargo {
+    ($($arg:expr),+) => {
+        exec_command!("cargo", $($arg),+)
+    };
+}
+
+macro_rules! dotnet {
+    ($($arg:expr),+) => {
+        exec_command!("dotnet", $($arg),+)
+    };
+}
+
+pub struct App {
+    name: String,
     repo_visibility: Visibility,
     software_builder: Box<dyn SoftwareProjectBuilder>,
 }
@@ -17,21 +50,18 @@ trait SoftwareProjectBuilder {
     fn ignore_str(&self) -> &'static str;
 }
 
-struct RustProjectBuilder<'a> {
-    name: &'a str,
+struct RustProjectBuilder {
+    name: String,
     lib: bool,
 }
 
-impl<'a> SoftwareProjectBuilder for RustProjectBuilder<'a> {
+impl SoftwareProjectBuilder for RustProjectBuilder {
     fn create(&self) {
         let project_type = match self.lib {
             true => "--lib",
             false => "--bin",
         };
-        std::process::Command::new("cargo")
-            .args(["new", project_type, self.name])
-            .output()
-            .unwrap();
+        cargo!("new", project_type, self.name.as_str());
     }
 
     fn ignore_str(&self) -> &'static str {
@@ -39,22 +69,18 @@ impl<'a> SoftwareProjectBuilder for RustProjectBuilder<'a> {
     }
 }
 
-struct CSharpProjectBuilder<'a> {
-    name: &'a str,
+struct CSharpProjectBuilder {
+    name: String,
     lib: bool,
 }
 
-impl<'a> SoftwareProjectBuilder for CSharpProjectBuilder<'a> {
+impl SoftwareProjectBuilder for CSharpProjectBuilder {
     fn create(&self) {
         let project_type = match self.lib {
             true => "classlib",
             false => "console",
         };
-        std::process::Command::new("dotnet")
-            .args(["new", project_type])
-            .args(["-o", self.name])
-            .output()
-            .unwrap();
+        dotnet!("new", project_type, "-o", self.name.as_str());
     }
 
     fn ignore_str(&self) -> &'static str {
@@ -62,7 +88,7 @@ impl<'a> SoftwareProjectBuilder for CSharpProjectBuilder<'a> {
     }
 }
 
-impl<'a> App<'a> {
+impl App {
     pub fn run(&self) {
         self.setup_directory();
         self.setup_src();
@@ -79,10 +105,7 @@ impl<'a> App<'a> {
             println!("{}: Unable to create README.md.", "Warning".yellow());
         }
 
-        std::process::Command::new("git")
-            .args(["init"])
-            .output()
-            .unwrap();
+        git!("init");
 
         std::fs::write(".gitignore", self.software_builder.ignore_str()).unwrap();
 
@@ -103,44 +126,17 @@ impl<'a> App<'a> {
             Visibility::Public => "--public",
             Visibility::Private => "--private",
         };
-        let res = std::process::Command::new("gh")
-            .args(["repo"])
-            .args(["create"])
-            .args([visibility])
-            .args([&self.name])
-            .output()
-            .unwrap()
-            .stdout;
-
+        let res = gh!("repo", "create", visibility, &self.name).stdout;
         String::from_utf8(res).unwrap().trim_end().to_string()
     }
 
     fn commit_and_push(&self, github: String) {
         println!("Pushing to repository...");
-        std::process::Command::new("git")
-            .args(["remote"])
-            .args(["add", "origin", &format!("{}.git", github)])
-            .output()
-            .unwrap();
-        std::process::Command::new("git")
-            .args(["add", "*"])
-            .output()
-            .unwrap();
-        std::process::Command::new("git")
-            .args(["branch"])
-            .args(["-m", "main"])
-            .output()
-            .unwrap();
-        std::process::Command::new("git")
-            .args(["commit"])
-            .args(["-m", "\"Project initialisation\""])
-            .output()
-            .unwrap();
-        std::process::Command::new("git")
-            .args(["push"])
-            .args(["-u", "origin", "main"])
-            .output()
-            .unwrap();
+        git!("remote", "add", "origin", &format!("{}.git", github));
+        git!("add", ".");
+        git!("branch", "-m", "main");
+        git!("commit", "-m", "Project initialisation");
+        git!("push");
     }
 }
 
@@ -150,7 +146,7 @@ impl<'a> App<'a> {
 #[command(about = "Creates starter project structure.")]
 #[command(version = "v0.0.1")]
 #[command(propagate_version = true)]
-struct Args {
+pub struct Args {
     #[clap(short, long, group = "language")]
     csharp: bool,
     #[clap(short, long, group = "language")]
@@ -163,21 +159,21 @@ struct Args {
     lib: bool,
 }
 
-impl<'a> From<Args> for App<'a> {
+impl From<Args> for App {
     fn from(args: Args) -> Self {
         let software_project_builder: Box<dyn SoftwareProjectBuilder> =
             match (args.rust, args.csharp) {
                 (_, true) => Box::new(CSharpProjectBuilder {
-                    name: args.name.as_str(),
+                    name: args.name.clone(),
                     lib: args.lib,
                 }),
                 (_, _) => Box::new(RustProjectBuilder {
-                    name: args.name.as_str(),
+                    name: args.name.clone(),
                     lib: args.lib,
                 }),
             };
         Self {
-            name: args.name.as_str(),
+            name: args.name,
             software_builder: software_project_builder,
             repo_visibility: match args.public {
                 true => Visibility::Public,
