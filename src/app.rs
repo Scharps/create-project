@@ -82,6 +82,9 @@ impl SoftwareProjectBuilder for CSharpProjectBuilder {
             false => "console",
         };
         dotnet!("new", project_type, "-o", self.name.as_str());
+        std::env::set_current_dir(self.name.as_str()).unwrap();
+        std::fs::write(".gitignore", self.ignore_str()).unwrap();
+        std::env::set_current_dir("..").unwrap();
     }
 
     fn ignore_str(&self) -> &'static str {
@@ -107,8 +110,6 @@ impl App {
         }
 
         git!("init");
-
-        std::fs::write(".gitignore", self.software_builder.ignore_str()).unwrap();
 
         println!("Creating docs directory...");
         std::fs::create_dir("docs").unwrap();
