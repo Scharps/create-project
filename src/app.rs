@@ -115,6 +115,8 @@ impl App {
 #[command(name = "Project Builder")]
 #[command(author = "Samuel J.")]
 #[command(about = "Creates starter project structure.")]
+#[command(version = "v0.0.1")]
+#[command(propagate_version = true)]
 struct Args {
     #[clap(short, long, group = "language")]
     csharp: bool,
