@@ -1,12 +1,16 @@
 use crate::prelude::*;
-use crate::software::{CSharpProjectBuilder, RustProjectBuilder, SoftwareProjectBuilder};
+use crate::software::{
+    CSharpProjectBuilder, RustProjectBuilder, SoftwareBuildResult, SoftwareProjectBuilder,
+};
 use clap::Parser;
 use colored::Colorize;
+
+const SOFTWARE_DIR: &str = "software";
 
 pub struct App {
     name: String,
     repo_visibility: Visibility,
-    software_builder: Box<dyn SoftwareProjectBuilder>,
+    software_builder: Option<Box<dyn SoftwareProjectBuilder>>,
 }
 
 enum Visibility {
@@ -17,7 +21,13 @@ enum Visibility {
 impl App {
     pub fn run(&self) {
         self.setup_directory();
-        self.setup_src();
+        if let Some(software_builder) = &self.software_builder {
+            if let Err(err) = App::set_up_software_project(software_builder.as_ref()) {
+                println!("{err}");
+                // println!("Reverting creation of project directory");
+                // TODO: Revert creation of project directory
+            }
+        }
         let repo = self.create_github_repo();
         self.commit_and_push(repo);
     }
@@ -32,17 +42,24 @@ impl App {
         }
 
         git!("init");
-        std::fs::write(".gitignore", self.software_builder.ignore_str()).unwrap();
+
+        if let Some(software_builder) = &self.software_builder {
+            std::fs::write(".gitignore", software_builder.ignore_str()).unwrap();
+        }
 
         println!("Creating docs directory...");
         std::fs::create_dir("docs").unwrap();
     }
 
-    fn setup_src(&self) {
-        std::fs::create_dir("src").unwrap();
-        std::env::set_current_dir("src").unwrap();
-        self.software_builder.create();
+    fn set_up_software_project(
+        software_builder: &dyn SoftwareProjectBuilder,
+    ) -> SoftwareBuildResult {
+        println!("Creating software project folder...");
+        std::fs::create_dir(SOFTWARE_DIR).unwrap();
+        std::env::set_current_dir(SOFTWARE_DIR).unwrap();
+        let res = software_builder.create();
         std::env::set_current_dir("..").unwrap();
+        res
     }
 
     fn create_github_repo(&self) -> String {
@@ -70,33 +87,32 @@ impl App {
 #[command(name = "Project Builder")]
 #[command(author = "Samuel J.")]
 #[command(about = "Creates starter project structure.")]
-#[command(version = "v0.0.1")]
+#[command(version = "v0.1.0")]
 #[command(propagate_version = true)]
 pub struct Args {
     #[clap(short, long, group = "language")]
-    csharp: bool,
+    csharp_project: Option<String>,
     #[clap(short, long, group = "language")]
-    rust: bool,
+    rust_project: Option<String>,
     #[clap(short, long, required = true)]
     name: String,
     #[clap(short, long, default_value_t = false)]
     public: bool,
-    #[clap(short, long, default_value_t = false)]
-    lib: bool,
 }
 
 impl From<Args> for App {
     fn from(args: Args) -> Self {
-        let software_project_builder: Box<dyn SoftwareProjectBuilder> =
-            match (args.rust, args.csharp) {
-                (_, true) => Box::new(CSharpProjectBuilder {
+        let software_project_builder: Option<Box<dyn SoftwareProjectBuilder>> =
+            match (args.csharp_project, args.rust_project) {
+                (Some(cs_template), _) => Some(Box::new(CSharpProjectBuilder {
                     name: args.name.clone(),
-                    lib: args.lib,
-                }),
-                (_, _) => Box::new(RustProjectBuilder {
+                    template: cs_template,
+                })),
+                (_, Some(rs_template)) => Some(Box::new(RustProjectBuilder {
                     name: args.name.clone(),
-                    lib: args.lib,
-                }),
+                    template: rs_template,
+                })),
+                _ => None,
             };
         Self {
             name: args.name,
