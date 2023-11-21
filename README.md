@@ -4,6 +4,12 @@
 
 Intended to be a simple command tool to create project directories, boilerplate, and git repository.
 
+## Requirements
+
+* Authorised GitHub CLI in path.
+* Dotnet in path.
+* Rust's Cargo in path.
+
 ## Usage 
 
 ### Example 1
